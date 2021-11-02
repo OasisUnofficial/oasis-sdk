@@ -475,6 +475,12 @@ impl<Cfg: Config> Module<Cfg> {
             params: &params,
         };
         let result = wasm::instantiate::<Cfg, C>(&mut exec_ctx, &contract, &body);
+
+        // Always return success in CheckTx, as we might not have up-to-date state.
+        if ctx.is_check_only() {
+            return Ok(types::InstantiateResult::default());
+        }
+
         let result = results::process_execution_result(ctx, result)?;
         results::process_execution_success::<Cfg, C>(ctx, &params, &contract, result)?;
 
@@ -516,6 +522,12 @@ impl<Cfg: Config> Module<Cfg> {
             params: &params,
         };
         let result = wasm::call::<Cfg, C>(&mut exec_ctx, &contract, &body);
+
+        // Always return success in CheckTx, as we might not have up-to-date state.
+        if ctx.is_check_only() {
+            return Ok(types::CallResult::default());
+        }
+
         let result = results::process_execution_result(ctx, result)?;
         let data = results::process_execution_success::<Cfg, C>(ctx, &params, &contract, result)?;
 
@@ -562,6 +574,12 @@ impl<Cfg: Config> Module<Cfg> {
         };
         // Pre-upgrade invocation must succeed for the upgrade to proceed.
         let result = wasm::pre_upgrade::<Cfg, C>(&mut exec_ctx, &contract, &body);
+
+        // Always return success in CheckTx, as we might not have up-to-date state.
+        if ctx.is_check_only() {
+            return Ok(());
+        }
+
         results::process_execution_result(ctx, result)?;
 
         // Update the contract code.
