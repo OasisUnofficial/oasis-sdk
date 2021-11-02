@@ -463,6 +463,10 @@ impl API for Module {
         let store = storage::PrefixStore::new(state, &MODULE_NAME);
         let accounts = storage::TypedStore::new(storage::PrefixStore::new(store, &state::ACCOUNTS));
         let account: types::Account = accounts.get(&address).unwrap_or_default();
+        println!(
+            "nonce: getting nonce: for: {:?} to: {:?}",
+            address, account.nonce
+        );
         Ok(account.nonce)
     }
 
@@ -578,7 +582,15 @@ impl API for Module {
         for si in tx.auth_info.signer_info.iter() {
             let address = si.address_spec.address();
             let account: types::Account = accounts.get(&address).unwrap_or_default();
+            println!(
+                "nonce: expected for: {:?}: {:?}, got: {:?}",
+                address, account.nonce, si.nonce
+            );
             if account.nonce != si.nonce {
+                println!(
+                    "Invalid nonce: expected for: {:?} {:?}, got: {:?}",
+                    address, account.nonce, si.nonce
+                );
                 // Reject unles nonce checking is disabled.
                 if !params.debug_disable_nonce_check {
                     return Err(modules::core::Error::InvalidNonce);
@@ -608,6 +620,10 @@ impl API for Module {
             // Update nonce.
             // TODO: Could support an option to defer this.
             account.nonce += 1;
+            println!(
+                "nonce: updating signer nonce for: {:?}, new: {:?}",
+                address, account.nonce
+            );
             accounts.insert(&address, account);
         }
         Ok(())
