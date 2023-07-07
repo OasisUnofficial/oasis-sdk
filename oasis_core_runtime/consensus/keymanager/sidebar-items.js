@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":[["Error","Errors emitted by the key manager module."]],"struct":[["EnclavePolicySGX","Per enclave key manager access control policy."],["PolicySGX","Key manager access control policy."],["SignedPolicySGX","Signed key manager access control policy."]]};

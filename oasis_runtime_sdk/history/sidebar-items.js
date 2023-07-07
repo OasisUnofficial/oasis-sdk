@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":[["Error","History host errors."]],"trait":[["HistoryHost","Interface to the runtime host to fetch historic information."]]};

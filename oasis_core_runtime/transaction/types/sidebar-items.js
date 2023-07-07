@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["TxnBatch","Batch of transaction inputs/outputs."]]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":[["TAG_BLOCK_TX_HASH","Hash used for block emitted tags not tied to a specific transaction."]],"struct":[["Tree","A Merkle tree containing transaction artifacts."]]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":[["cell","Low-level storage primitive that holds one value."],["map","A map backed by contract storage."]]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":[["EPOCH_INVALID","An invalid epoch time."]],"struct":[["EpochTimeState","The epoch state."]],"type":[["EpochTime","The number of intervals (epochs) since a fixed instant in time/block height (epoch date/height)."]]};

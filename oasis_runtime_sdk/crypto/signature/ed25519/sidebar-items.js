@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["MemorySigner","A memory-backed signer for Ed25519."],["PublicKey","An Ed25519 public key."]]};

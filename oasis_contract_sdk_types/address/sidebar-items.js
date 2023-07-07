@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":[["Error","Error."]],"struct":[["Address","An account address."]]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["address","Test address  G ."],["pk","Test public key  G ."],["pk_sr25519","Test Sr25519 public key  G ."],["sigspec","Test address derivation information  G ."]]};

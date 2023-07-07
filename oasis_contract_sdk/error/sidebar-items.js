@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"trait":[["Error","A contract error that gets propagated to the caller."]]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":[["VERSION_KEY","Version key used in serialized form."]],"struct":[["Versioned","A generic versioned serializable data structure."]]};

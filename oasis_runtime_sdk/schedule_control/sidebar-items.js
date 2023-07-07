@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":[["Error","Schedule control errors."]],"trait":[["ScheduleControlHost","Interface to the runtime host that supports schedule control features."]]};

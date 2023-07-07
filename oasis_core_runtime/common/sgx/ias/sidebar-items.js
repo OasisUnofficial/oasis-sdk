@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":[["QUOTE_CONTEXT_LEN",""]],"fn":[["verify","Verify attestation report."]],"struct":[["AVR","Attestation verification report."],["QuotePolicy","Quote validity policy."]],"type":[["QuoteContext","The purpose of `QuoteContext` is to prevent quotes from being used in different contexts. The value is included as a prefix in report data."]]};

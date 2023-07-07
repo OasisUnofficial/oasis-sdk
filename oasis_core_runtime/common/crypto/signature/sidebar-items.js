@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["MultiSigned","Blob signed by multiple public keys."],["PrivateKey","An Ed25519 private key."],["PublicKey","An Ed25519 public key."],["Signature","An Ed25519 signature."],["SignatureBundle","A signature bundled with a public key."],["Signed","Blob signed with one public key."]],"trait":[["Signer","A abstract signer."]]};

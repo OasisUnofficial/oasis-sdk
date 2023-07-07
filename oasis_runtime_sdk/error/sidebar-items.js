@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["RuntimeError","A serializable error."]],"trait":[["Error","A runtime error that gets propagated to the caller."]]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["abort","Aborts the process via `std::process::abort`, but also making sure that log buffers are flushed."]]};

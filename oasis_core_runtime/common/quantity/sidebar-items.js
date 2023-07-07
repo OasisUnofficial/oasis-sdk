@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["Quantity","An arbitrary precision unsigned integer."]]};

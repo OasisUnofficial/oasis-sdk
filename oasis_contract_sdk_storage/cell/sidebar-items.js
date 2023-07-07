@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["ConfidentialCell","A storage cell identifies a storage key of a specific type."],["PublicCell","A storage cell identifies a storage key of a specific type."]]};

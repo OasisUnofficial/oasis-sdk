@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["Event","An event emitted from the contract."]]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["Dispatcher","Runtime call dispatcher."],["PostInitState","State returned by the initializer."],["PreInitState","State available before initialization."]],"trait":[["Initializer","Interface for dispatcher initializers."]]};

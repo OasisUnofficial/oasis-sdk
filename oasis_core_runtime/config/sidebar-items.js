@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["Config","Global runtime configuration."],["Storage","Storage-related configuration."]]};

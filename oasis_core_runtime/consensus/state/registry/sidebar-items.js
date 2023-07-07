@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["ImmutableState","Consensus registry state wrapper."]]};

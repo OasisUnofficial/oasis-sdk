@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"trait":[["Marshal","The `Marshal` trait is used for marshaling and unmarshaling MKVS trees."]]};

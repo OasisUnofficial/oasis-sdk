@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":[["StoreKind","Kind of the store to use."]]};
