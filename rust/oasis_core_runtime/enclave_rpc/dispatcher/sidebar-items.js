@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["Dispatcher","Method","MethodDescriptor"],"trait":["Handler","MethodHandler","MethodHandlerDispatch"],"type":["KeyManagerQuotePolicyHandler","KeyManagerStatusHandler"]};

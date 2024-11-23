@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["signature_context_with_chain_separation","signature_context_with_runtime_separation"],"struct":["MultiSigned","PrivateKey","PublicKey","Signature","SignatureBundle","Signed"],"trait":["Signer"]};
