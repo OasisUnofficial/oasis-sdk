@@ -1,3 +1,6 @@
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Test
 
 Testing of your ROFL-powered applications and services depends on the [ROFL
@@ -30,17 +33,57 @@ Simply spin up the [`sapphire-localnet`] Docker image and bind-mount the folder
 that contains your `rofl.yaml`:
 
 ```shell
-docker run -it -p8544-8548:8544-8548 -v .:/rofls ghcr.io/oasisprotocol/sapphire-localnet
+docker run -it -p8544-8549:8544-8549 -v .:/rofls ghcr.io/oasisprotocol/sapphire-localnet
 ```
 
 In a few moments you should see an output like
 
 ```
-* TDX ROFL detected. Localnet appd service will be accessible on the host via rofl-appd.sock in the shared volume
+* TDX ROFL detected. Localnet appd service will be accessible via UNIX socket and TCP port
 ```
 
 which means `rofl-appd.sock` will appear in the bind-mounted folder on your host
-when the Localnet spins up.
+when the Localnet spins up. The appd service is also exposed via TCP on port
+`8549`, if you cannot use the UNIX socket on your host (e.g. macOS):
+
+<Tabs>
+<TabItem value="UNIX socket (Linux)">
+```shell title="Shell"
+curl --unix-socket ./rofl-appd.sock http://localhost/rofl/v1/app/id
+```
+
+[ROFL clients] can connect to the UNIX socket as follows:
+
+```python title="Python"
+from oasis_rofl_client import RoflClient
+client = RoflClient(url="./rofl-appd.sock")
+```
+
+```typescript title="TypeScript"
+import { RoflClient } from '@oasisprotocol/rofl-client';
+const client = new RoflClient({ url: './rofl-appd.sock' });
+```
+</TabItem>
+<TabItem value="TCP port (macOS, Linux)">
+```shell title="Shell"
+curl http://localhost:8549/rofl/v1/app/id
+```
+
+[ROFL clients] can connect to the TCP port as follows:
+
+```python title="Python"
+from oasis_rofl_client import RoflClient
+client = RoflClient(url="http://localhost:8549")
+```
+
+```typescript title="TypeScript"
+import { RoflClient } from '@oasisprotocol/rofl-client';
+const client = new RoflClient({ url: 'http://localhost:8549' });
+```
+</TabItem>
+</Tabs>
+
+[ROFL clients]: ../features/appd.md#rofl-clients
 
 Next, it's time to spin up your services and run tests. If you use the same
 `compose.yaml` for production and testing, the following one-liner may come
