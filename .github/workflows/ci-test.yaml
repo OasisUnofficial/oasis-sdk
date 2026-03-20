@@ -626,8 +626,8 @@ jobs:
         env:
           BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
 
-  test-python-rofl-client:
-    name: test-python-rofl-client
+  test-rofl-client-python:
+    name: test-rofl-client-python
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -648,3 +648,16 @@ jobs:
       - name: Run tests
         working-directory: rofl-client/py
         run: uv run pytest tests
+
+  test-rofl-client-rust:
+    name: test-rofl-client-rust
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        run: rustup show
+
+      - name: Run tests
+        run: cargo test -p oasis-rofl-client
