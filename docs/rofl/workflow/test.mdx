@@ -63,6 +63,11 @@ client = RoflClient(url="./rofl-appd.sock")
 import { RoflClient } from '@oasisprotocol/rofl-client';
 const client = new RoflClient({ url: './rofl-appd.sock' });
 ```
+
+```rust title="Rust"
+use oasis_rofl_client::RoflClient;
+let client = RoflClient::with_socket_path("./rofl-appd.sock")?;
+```
 </TabItem>
 <TabItem value="TCP port (macOS, Linux)">
 ```shell title="Shell"
@@ -79,6 +84,11 @@ client = RoflClient(url="http://localhost:8549")
 ```typescript title="TypeScript"
 import { RoflClient } from '@oasisprotocol/rofl-client';
 const client = new RoflClient({ url: 'http://localhost:8549' });
+```
+
+```rust title="Rust"
+use oasis_rofl_client::RoflClient;
+let client = RoflClient::with_url("http://localhost:8549")?;
 ```
 </TabItem>
 </Tabs>

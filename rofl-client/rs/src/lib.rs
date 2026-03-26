@@ -1,12 +1,33 @@
 // rofl-client/rs/src/lib.rs
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::{
+    io::{Read, Write},
+    net::TcpStream,
+    path::Path,
+};
 
 const DEFAULT_SOCKET: &str = "/run/rofl-appd.sock";
+const DEFAULT_HTTP_PORT: u16 = 80;
+const HTTP_SCHEME: &str = "http://";
+const HTTPS_SCHEME: &str = "https://";
+const LOCALHOST_HOST: &str = "localhost";
 
 #[derive(Clone)]
 pub struct RoflClient {
-    socket_path: String,
+    transport: Transport,
+}
+
+#[derive(Clone)]
+enum Transport {
+    UnixSocket { socket_path: String },
+    Http(HttpTransport),
+}
+
+#[derive(Clone)]
+struct HttpTransport {
+    connect_target: String,
+    host_header: String,
+    base_path: String,
 }
 
 impl RoflClient {
@@ -21,22 +42,49 @@ impl RoflClient {
         if !Path::new(&socket_path).exists() {
             return Err(format!("Socket not found at: {socket_path}").into());
         }
-        Ok(Self { socket_path })
+        Ok(Self {
+            transport: Transport::UnixSocket { socket_path },
+        })
+    }
+
+    pub fn with_url(url: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        if let Some(url) = url.strip_prefix(HTTP_SCHEME) {
+            let transport = HttpTransport::parse(url)?;
+            return Ok(Self {
+                transport: Transport::Http(transport),
+            });
+        }
+        if url.starts_with(HTTPS_SCHEME) {
+            return Err(
+                "HTTPS transport is not supported by oasis-rofl-client; use http:// or a Unix socket path"
+                    .into(),
+            );
+        }
+
+        Self::with_socket_path(url)
+    }
+
+    async fn blocking<T, F>(&self, f: F) -> Result<T, Box<dyn std::error::Error>>
+    where
+        T: Send + 'static,
+        F: FnOnce(Transport) -> std::io::Result<T> + Send + 'static,
+    {
+        let transport = self.transport.clone();
+        tokio::task::spawn_blocking(move || f(transport))
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?
+            .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
     }
 
     // GET /rofl/v1/app/id
     pub async fn get_app_id(&self) -> Result<String, Box<dyn std::error::Error>> {
-        let sock = self.socket_path.clone();
-        let res = tokio::task::spawn_blocking(move || -> std::io::Result<String> {
-            let body = http_unix_request(&sock, "GET", "/rofl/v1/app/id", None, None)?;
+        self.blocking(|transport| {
+            let body = transport.request("GET", "/rofl/v1/app/id", None, None)?;
             let s = String::from_utf8(body)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             Ok(s.trim().to_string())
         })
         .await
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-        Ok(res)
     }
 
     // POST /rofl/v1/keys/generate
@@ -45,14 +93,12 @@ impl RoflClient {
         key_id: &str,
         kind: KeyKind,
     ) -> Result<String, Box<dyn std::error::Error>> {
-        let sock = self.socket_path.clone();
         let req = serde_json::to_vec(&KeyGenerationRequest {
             key_id: key_id.to_string(),
             kind: kind.to_string(),
         })?;
-        let res = tokio::task::spawn_blocking(move || -> std::io::Result<String> {
-            let body = http_unix_request(
-                &sock,
+        self.blocking(move |transport| {
+            let body = transport.request(
                 "POST",
                 "/rofl/v1/keys/generate",
                 Some(&req),
@@ -63,9 +109,6 @@ impl RoflClient {
             Ok(resp.key)
         })
         .await
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-        Ok(res)
     }
 
     // POST /rofl/v1/tx/sign-submit
@@ -74,11 +117,9 @@ impl RoflClient {
         tx: Tx,
         encrypt: Option<bool>,
     ) -> Result<String, Box<dyn std::error::Error>> {
-        let sock = self.socket_path.clone();
         let req = serde_json::to_vec(&SignSubmitRequest { tx, encrypt })?;
-        let res = tokio::task::spawn_blocking(move || -> std::io::Result<String> {
-            let body = http_unix_request(
-                &sock,
+        self.blocking(move |transport| {
+            let body = transport.request(
                 "POST",
                 "/rofl/v1/tx/sign-submit",
                 Some(&req),
@@ -89,28 +130,19 @@ impl RoflClient {
             Ok(resp.data)
         })
         .await
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-        Ok(res)
     }
 
     // GET /rofl/v1/metadata
     pub async fn get_metadata(
         &self,
     ) -> Result<std::collections::HashMap<String, String>, Box<dyn std::error::Error>> {
-        let sock = self.socket_path.clone();
-        let res = tokio::task::spawn_blocking(
-            move || -> std::io::Result<std::collections::HashMap<String, String>> {
-                let body = http_unix_request(&sock, "GET", "/rofl/v1/metadata", None, None)?;
-                let resp: std::collections::HashMap<String, String> = serde_json::from_slice(&body)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-                Ok(resp)
-            },
-        )
+        self.blocking(|transport| {
+            let body = transport.request("GET", "/rofl/v1/metadata", None, None)?;
+            let resp: std::collections::HashMap<String, String> = serde_json::from_slice(&body)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            Ok(resp)
+        })
         .await
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-        Ok(res)
     }
 
     // POST /rofl/v1/metadata
@@ -118,11 +150,9 @@ impl RoflClient {
         &self,
         metadata: &std::collections::HashMap<String, String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let sock = self.socket_path.clone();
         let req = serde_json::to_vec(metadata)?;
-        tokio::task::spawn_blocking(move || -> std::io::Result<()> {
-            let _body = http_unix_request(
-                &sock,
+        self.blocking(move |transport| {
+            transport.request(
                 "POST",
                 "/rofl/v1/metadata",
                 Some(&req),
@@ -131,9 +161,6 @@ impl RoflClient {
             Ok(())
         })
         .await
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-        Ok(())
     }
 
     // POST /rofl/v1/query
@@ -142,15 +169,13 @@ impl RoflClient {
         method: &str,
         args: &[u8],
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let sock = self.socket_path.clone();
         let payload = serde_json::json!({
             "method": method,
             "args": hex::encode(args),
         });
         let req = serde_json::to_vec(&payload)?;
-        let res = tokio::task::spawn_blocking(move || -> std::io::Result<Vec<u8>> {
-            let body = http_unix_request(
-                &sock,
+        self.blocking(move |transport| {
+            let body = transport.request(
                 "POST",
                 "/rofl/v1/query",
                 Some(&req),
@@ -166,9 +191,6 @@ impl RoflClient {
             Ok(data)
         })
         .await
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-        Ok(res)
     }
 
     /// Convenience helper for ETH-style call
@@ -190,24 +212,183 @@ impl RoflClient {
     }
 }
 
-// Blocking HTTP-over-UDS request using std::os::unix::net::UnixStream
-fn http_unix_request(
+impl Transport {
+    fn request(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+        content_type: Option<&str>,
+    ) -> std::io::Result<Vec<u8>> {
+        match self {
+            Self::UnixSocket { socket_path } => {
+                unix_socket_request(socket_path, method, path, body, content_type)
+            }
+            Self::Http(http) => {
+                let stream = TcpStream::connect(&http.connect_target)?;
+                let request_path = http.request_path(path)?;
+                http_request(
+                    stream,
+                    &http.host_header,
+                    method,
+                    &request_path,
+                    body,
+                    content_type,
+                )
+            }
+        }
+    }
+}
+
+impl HttpTransport {
+    fn parse(url: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        if url.is_empty() {
+            return Err("HTTP URL must include a host".into());
+        }
+
+        let authority_end = url.find(['/', '?', '#']).unwrap_or(url.len());
+        let authority = &url[..authority_end];
+        let suffix = &url[authority_end..];
+
+        if authority.is_empty() {
+            return Err("HTTP URL must include a host".into());
+        }
+        if authority.chars().any(char::is_whitespace) {
+            return Err("HTTP URL must not contain whitespace in the authority".into());
+        }
+        if authority.contains('@') {
+            return Err("HTTP URL must not include user info".into());
+        }
+        if suffix.starts_with('?') || suffix.starts_with('#') {
+            return Err("HTTP URL must not include a query string or fragment".into());
+        }
+        if suffix.contains('?') || suffix.contains('#') {
+            return Err("HTTP URL base path must not include a query string or fragment".into());
+        }
+
+        let connect_target = normalize_connect_target(authority)?;
+        let base_path = normalize_base_path(suffix)?;
+
+        Ok(Self {
+            connect_target,
+            host_header: authority.to_string(),
+            base_path,
+        })
+    }
+
+    fn request_path(&self, path: &str) -> std::io::Result<String> {
+        if !path.starts_with('/') {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "ROFL endpoint path must start with '/'",
+            ));
+        }
+
+        if self.base_path.is_empty() {
+            return Ok(path.to_string());
+        }
+
+        Ok(format!("{}{}", self.base_path, path))
+    }
+}
+
+fn normalize_connect_target(authority: &str) -> Result<String, Box<dyn std::error::Error>> {
+    if authority.starts_with('[') {
+        let Some(end) = authority.find(']') else {
+            return Err("HTTP URL contains an invalid IPv6 host".into());
+        };
+        if end == 1 {
+            return Err("HTTP URL must include a host".into());
+        }
+        let suffix = &authority[end + 1..];
+        return Ok(match suffix {
+            "" => format!("{authority}:{DEFAULT_HTTP_PORT}"),
+            _ if suffix.starts_with(':') => {
+                validate_port(&suffix[1..])?;
+                authority.to_string()
+            }
+            _ => return Err("HTTP URL contains an invalid IPv6 host".into()),
+        });
+    }
+
+    let colon_count = authority.matches(':').count();
+    match colon_count {
+        0 => Ok(format!("{authority}:{DEFAULT_HTTP_PORT}")),
+        1 => {
+            let Some((host, port)) = authority.split_once(':') else {
+                return Err("HTTP URL contains an invalid authority".into());
+            };
+            if host.is_empty() {
+                return Err("HTTP URL must include a host".into());
+            }
+            validate_port(port)?;
+            Ok(authority.to_string())
+        }
+        _ => Err("HTTP URL contains an invalid host; IPv6 addresses must be bracketed".into()),
+    }
+}
+
+fn validate_port(port: &str) -> Result<(), Box<dyn std::error::Error>> {
+    if port.is_empty() {
+        return Err("HTTP URL must include a numeric port after ':'".into());
+    }
+    port.parse::<u16>()
+        .map(|_| ())
+        .map_err(|_| "HTTP URL contains an invalid port".into())
+}
+
+fn normalize_base_path(path: &str) -> Result<String, Box<dyn std::error::Error>> {
+    if path.is_empty() || path == "/" {
+        return Ok(String::new());
+    }
+    if !path.starts_with('/') {
+        return Err("HTTP URL base path must start with '/'".into());
+    }
+
+    Ok(path.trim_end_matches('/').to_string())
+}
+
+#[cfg(unix)]
+fn unix_socket_request(
     socket_path: &str,
     method: &str,
     path: &str,
     body: Option<&[u8]>,
     content_type: Option<&str>,
 ) -> std::io::Result<Vec<u8>> {
-    use std::{
-        io::{Error, ErrorKind, Read, Write},
-        os::unix::net::UnixStream,
-    };
+    use std::os::unix::net::UnixStream;
 
-    let mut stream = UnixStream::connect(socket_path)?;
+    let stream = UnixStream::connect(socket_path)?;
+    http_request(stream, LOCALHOST_HOST, method, path, body, content_type)
+}
+
+#[cfg(not(unix))]
+fn unix_socket_request(
+    _socket_path: &str,
+    _method: &str,
+    _path: &str,
+    _body: Option<&[u8]>,
+    _content_type: Option<&str>,
+) -> std::io::Result<Vec<u8>> {
+    Err(std::io::Error::other(
+        "Unix domain socket transport is not supported on this platform; use HTTP transport instead",
+    ))
+}
+
+// Blocking HTTP/1.1 request over any synchronous stream.
+fn http_request<S: Read + Write>(
+    mut stream: S,
+    host: &str,
+    method: &str,
+    path: &str,
+    body: Option<&[u8]>,
+    content_type: Option<&str>,
+) -> std::io::Result<Vec<u8>> {
+    use std::io::{Error, ErrorKind};
 
     let mut req = Vec::new();
     req.extend_from_slice(format!("{method} {path} HTTP/1.1\r\n").as_bytes());
-    req.extend_from_slice(b"Host: localhost\r\n");
+    req.extend_from_slice(format!("Host: {host}\r\n").as_bytes());
     req.extend_from_slice(b"Connection: close\r\n");
     if let Some(ct) = content_type {
         req.extend_from_slice(format!("Content-Type: {ct}\r\n").as_bytes());
@@ -333,47 +514,89 @@ mod tests {
     use super::*;
     use std::{
         io::{Read, Write},
-        os::unix::net::UnixListener,
+        net::TcpListener,
         thread,
     };
+
+    #[cfg(unix)]
+    use std::os::unix::net::UnixListener;
+    #[cfg(unix)]
     use tempfile::TempDir;
 
-    fn setup_mock_server(responses: Vec<(String, String)>) -> (TempDir, String) {
+    #[cfg(unix)]
+    fn setup_mock_uds_server(responses: Vec<(String, String)>) -> (TempDir, String) {
         let temp_dir = TempDir::new().unwrap();
         let socket_path = temp_dir.path().join("test.sock");
         let socket_path_str = socket_path.to_string_lossy().to_string();
 
         let listener = UnixListener::bind(&socket_path).unwrap();
 
-        thread::spawn(move || {
-            for (expected_path, response) in responses {
-                if let Ok((mut stream, _)) = listener.accept() {
-                    let mut buf = vec![0u8; 4096];
-                    let n = stream.read(&mut buf).unwrap();
-                    let request = String::from_utf8_lossy(&buf[..n]);
+        thread::spawn(move || serve_requests(listener, responses));
 
-                    // Check if the request contains the expected path
-                    assert!(request.contains(&expected_path));
-
-                    let http_response = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
-                        response.len(),
-                        response
-                    );
-                    stream.write_all(http_response.as_bytes()).unwrap();
-                }
-            }
-        });
-
-        // Give the server time to start
         thread::sleep(std::time::Duration::from_millis(100));
 
         (temp_dir, socket_path_str)
     }
 
+    fn setup_mock_tcp_server(responses: Vec<(String, String)>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+
+        thread::spawn(move || serve_requests(listener, responses));
+
+        thread::sleep(std::time::Duration::from_millis(100));
+
+        format!("http://{address}")
+    }
+
+    fn serve_requests<L>(listener: L, responses: Vec<(String, String)>)
+    where
+        L: AcceptOnce,
+    {
+        for (expected_path, response) in responses {
+            if let Some(mut stream) = listener.accept_one() {
+                let mut buf = vec![0u8; 4096];
+                let n = stream.read(&mut buf).unwrap();
+                let request = String::from_utf8_lossy(&buf[..n]);
+                assert!(request.contains(&expected_path));
+
+                let http_response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+                    response.len(),
+                    response
+                );
+                stream.write_all(http_response.as_bytes()).unwrap();
+            }
+        }
+    }
+
+    trait AcceptOnce {
+        type Stream: Read + Write;
+
+        fn accept_one(&self) -> Option<Self::Stream>;
+    }
+
+    #[cfg(unix)]
+    impl AcceptOnce for UnixListener {
+        type Stream = std::os::unix::net::UnixStream;
+
+        fn accept_one(&self) -> Option<Self::Stream> {
+            self.accept().ok().map(|(stream, _)| stream)
+        }
+    }
+
+    impl AcceptOnce for TcpListener {
+        type Stream = std::net::TcpStream;
+
+        fn accept_one(&self) -> Option<Self::Stream> {
+            self.accept().ok().map(|(stream, _)| stream)
+        }
+    }
+
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_get_app_id() {
-        let (_temp_dir, socket_path) = setup_mock_server(vec![(
+        let (_temp_dir, socket_path) = setup_mock_uds_server(vec![(
             "/rofl/v1/app/id".to_string(),
             "oasis1qr677rv0dcnh7ys4yanlynysvnjtk9gnsyhvm5wj".to_string(),
         )]);
@@ -384,10 +607,11 @@ mod tests {
         assert_eq!(app_id, "oasis1qr677rv0dcnh7ys4yanlynysvnjtk9gnsyhvm5wj");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_generate_key() {
         let response = r#"{"key":"0x123456789abcdef"}"#;
-        let (_temp_dir, socket_path) = setup_mock_server(vec![(
+        let (_temp_dir, socket_path) = setup_mock_uds_server(vec![(
             "/rofl/v1/keys/generate".to_string(),
             response.to_string(),
         )]);
@@ -401,10 +625,11 @@ mod tests {
         assert_eq!(key, "0x123456789abcdef");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_get_metadata() {
         let response = r#"{"key1":"value1","key2":"value2"}"#;
-        let (_temp_dir, socket_path) = setup_mock_server(vec![(
+        let (_temp_dir, socket_path) = setup_mock_uds_server(vec![(
             "/rofl/v1/metadata".to_string(),
             response.to_string(),
         )]);
@@ -416,10 +641,11 @@ mod tests {
         assert_eq!(metadata.get("key2").unwrap(), "value2");
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_set_metadata() {
         let (_temp_dir, socket_path) =
-            setup_mock_server(vec![("/rofl/v1/metadata".to_string(), "".to_string())]);
+            setup_mock_uds_server(vec![("/rofl/v1/metadata".to_string(), "".to_string())]);
 
         let client = RoflClient::with_socket_path(&socket_path).unwrap();
         let mut metadata = std::collections::HashMap::new();
@@ -428,17 +654,115 @@ mod tests {
         client.set_metadata(&metadata).await.unwrap();
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn test_query() {
         let response = r#"{"data":"48656c6c6f"}"#;
         let (_temp_dir, socket_path) =
-            setup_mock_server(vec![("/rofl/v1/query".to_string(), response.to_string())]);
+            setup_mock_uds_server(vec![("/rofl/v1/query".to_string(), response.to_string())]);
 
         let client = RoflClient::with_socket_path(&socket_path).unwrap();
         let args = b"\xa1\x64test\x65value";
         let result = client.query("test.Method", args).await.unwrap();
 
         assert_eq!(result, b"Hello");
+    }
+
+    #[tokio::test]
+    async fn test_http_transport_get_app_id() {
+        let url = setup_mock_tcp_server(vec![(
+            "/rofl/v1/app/id".to_string(),
+            "oasis1qr677rv0dcnh7ys4yanlynysvnjtk9gnsyhvm5wj".to_string(),
+        )]);
+
+        let client = RoflClient::with_url(&url).unwrap();
+        let app_id = client.get_app_id().await.unwrap();
+
+        assert_eq!(app_id, "oasis1qr677rv0dcnh7ys4yanlynysvnjtk9gnsyhvm5wj");
+    }
+
+    #[tokio::test]
+    async fn test_http_transport_preserves_base_path() {
+        let base_url = setup_mock_tcp_server(vec![(
+            "/prefix/rofl/v1/keys/generate".to_string(),
+            r#"{"key":"0x123456789abcdef"}"#.to_string(),
+        )]);
+
+        let client = RoflClient::with_url(&format!("{base_url}/prefix/")).unwrap();
+        let key = client
+            .generate_key("test-key-id", KeyKind::Secp256k1)
+            .await
+            .unwrap();
+
+        assert_eq!(key, "0x123456789abcdef");
+    }
+
+    #[tokio::test]
+    async fn test_http_transport_uses_default_port() {
+        let transport = HttpTransport::parse("example.com").unwrap();
+        assert_eq!(transport.connect_target, "example.com:80");
+        assert_eq!(transport.host_header, "example.com");
+        assert_eq!(transport.base_path, "");
+    }
+
+    #[tokio::test]
+    async fn test_with_url_rejects_https() {
+        let err = match RoflClient::with_url("https://localhost:8549") {
+            Ok(_) => panic!("expected https URL to be rejected"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("HTTPS transport is not supported"));
+    }
+
+    #[tokio::test]
+    async fn test_with_url_rejects_query_and_fragment() {
+        let err = match RoflClient::with_url("http://localhost:8549/prefix?test=true") {
+            Ok(_) => panic!("expected URL with query string to be rejected"),
+            Err(err) => err,
+        };
+        assert!(err
+            .to_string()
+            .contains("must not include a query string or fragment"));
+
+        let err = match RoflClient::with_url("http://localhost:8549#fragment") {
+            Ok(_) => panic!("expected URL with fragment to be rejected"),
+            Err(err) => err,
+        };
+        assert!(err
+            .to_string()
+            .contains("must not include a query string or fragment"));
+    }
+
+    #[tokio::test]
+    async fn test_http_url_without_host_is_rejected() {
+        let err = match RoflClient::with_url("http://") {
+            Ok(_) => panic!("expected URL without host to be rejected"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("must include a host"));
+    }
+
+    #[tokio::test]
+    async fn test_with_url_rejects_invalid_authority() {
+        let err = match RoflClient::with_url("http://localhost:") {
+            Ok(_) => panic!("expected URL with empty port to be rejected"),
+            Err(err) => err,
+        };
+        assert!(err
+            .to_string()
+            .contains("must include a numeric port after ':'"));
+
+        let err = match RoflClient::with_url("http://:8549") {
+            Ok(_) => panic!("expected URL with empty host to be rejected"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("must include a host"));
+
+        let err = match RoflClient::with_url("http://localhost:abc") {
+            Ok(_) => panic!("expected URL with non-numeric port to be rejected"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("contains an invalid port"));
     }
 
     #[tokio::test]
