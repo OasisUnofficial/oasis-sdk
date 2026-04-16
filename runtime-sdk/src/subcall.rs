@@ -44,6 +44,8 @@ pub struct SubcallInfo {
     pub max_depth: u16,
     /// Maximum gas amount that can be consumed.
     pub max_gas: u64,
+    /// Whether the subcall is read-only.
+    pub read_only: bool,
 }
 
 /// Result of dispatching a subcall.
@@ -140,7 +142,7 @@ pub fn call<C: Context, V: Validator + 'static>(
             format: transaction::CallFormat::Plain,
             method: info.method,
             body: info.body,
-            ..Default::default()
+            read_only: info.read_only,
         },
         auth_info: transaction::AuthInfo {
             signer_info: vec![transaction::SignerInfo {

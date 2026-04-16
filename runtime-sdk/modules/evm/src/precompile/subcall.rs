@@ -63,6 +63,10 @@ pub(super) fn call_subcall<B: EVMBackendExt>(
     // Cap maximum amount of gas that can be used.
     let max_gas = handle.remaining_gas();
 
+    // Ensure that the subcall is read-only and cannot modify state when
+    // the precompile is called using a static call.
+    let read_only = handle.is_static();
+
     let result = backend
         .subcall(
             subcall::SubcallInfo {
@@ -71,6 +75,7 @@ pub(super) fn call_subcall<B: EVMBackendExt>(
                 body,
                 max_depth: 8,
                 max_gas,
+                read_only,
             },
             ForbidReentrancy,
         )
@@ -150,7 +155,7 @@ mod test {
         let dispatch_result = signer.call_evm(
             &ctx,
             contract_address.into(),
-            solabi::selector!("test(bytes,bytes)"),
+            solabi::selector!("test_call(bytes,bytes)"),
             &(
                 solabi::Bytes("accounts.Transfer".as_bytes()),
                 solabi::Bytes(cbor::to_vec(accounts::types::Transfer {
@@ -182,7 +187,7 @@ mod test {
         let dispatch_result = signer.call_evm_opts(
             &ctx,
             contract_address.into(),
-            solabi::selector!("test(bytes,bytes)"),
+            solabi::selector!("test_call(bytes,bytes)"),
             &(
                 solabi::Bytes("accounts.Transfer".as_bytes()),
                 solabi::Bytes(cbor::to_vec(accounts::types::Transfer {
@@ -233,7 +238,80 @@ mod test {
 
         let events: Vec<GasUsedEvent> = cbor::from_slice(&tags[1].value).unwrap();
         assert_eq!(events.len(), 1); // Just one gas used event.
-        assert_eq!(events[0].amount, 25742);
+        assert_eq!(events[0].amount, 25738);
+    }
+
+    #[test]
+    fn test_read_only() {
+        let mut mock = Mock::default();
+        let ctx = mock.create_ctx_for_runtime::<TestRuntime>(false);
+        let mut signer = EvmSigner::new(0, keys::dave::sigspec());
+
+        // Create contract.
+        let contract_address = init_and_deploy_contract(&ctx, &mut signer, TEST_CONTRACT_CODE_HEX);
+
+        // Transfer some tokens to the contract.
+        let dispatch_result = signer.call(
+            &ctx,
+            "accounts.Transfer",
+            accounts::types::Transfer {
+                to: TestConfig::map_address(contract_address),
+                amount: BaseUnits::native(2_000),
+            },
+        );
+        assert!(
+            dispatch_result.result.is_success(),
+            "transfer should succeed"
+        );
+
+        // Call into the test contract.
+        let dispatch_result = signer.call_evm_opts(
+            &ctx,
+            contract_address.into(),
+            solabi::selector!("test_staticcall(bytes,bytes)"),
+            &(
+                solabi::Bytes("accounts.Transfer".as_bytes()),
+                solabi::Bytes(cbor::to_vec(accounts::types::Transfer {
+                    to: keys::alice::address(),
+                    amount: BaseUnits::native(1_000),
+                })),
+            ),
+            CallOptions {
+                fee: Fee {
+                    amount: BaseUnits::native(100),
+                    gas: 1_000_000,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        assert!(
+            !dispatch_result.result.is_success(),
+            "call should fail as it is not read-only"
+        );
+
+        // Call into test contract again with a normal call.
+        let dispatch_result = signer.call_evm_opts(
+            &ctx,
+            contract_address.into(),
+            solabi::selector!("test_call(bytes,bytes)"),
+            &(
+                solabi::Bytes("accounts.Transfer".as_bytes()),
+                solabi::Bytes(cbor::to_vec(accounts::types::Transfer {
+                    to: keys::alice::address(),
+                    amount: BaseUnits::native(1_000),
+                })),
+            ),
+            CallOptions {
+                fee: Fee {
+                    amount: BaseUnits::native(100),
+                    gas: 1_000_000,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        assert!(dispatch_result.result.is_success(), "call should succeed");
     }
 
     #[test]
@@ -285,14 +363,14 @@ mod test {
         let dispatch_result = signer.call_evm(
             &ctx,
             contract_address.into(),
-            solabi::selector!("test(bytes,bytes)"),
+            solabi::selector!("test_call(bytes,bytes)"),
             &(
                 solabi::Bytes("evm.Call".as_bytes()),
                 solabi::Bytes(cbor::to_vec(evm::types::Call {
                     address: contract_address.into(),
                     value: 0.into(),
                     data: solabi::encode_with_selector(
-                        solabi::selector!("test(bytes,bytes)"),
+                        solabi::selector!("test_call(bytes,bytes)"),
                         &(
                             solabi::Bytes("accounts.Transfer".as_bytes()),
                             solabi::Bytes(cbor::to_vec(accounts::types::Transfer {
@@ -339,7 +417,7 @@ mod test {
         let dispatch_result = signer.call_evm_opts(
             &ctx,
             contract_address.into(),
-            solabi::selector!("test(bytes,bytes)"),
+            solabi::selector!("test_call(bytes,bytes)"),
             &(
                 solabi::Bytes("accounts.Transfer".as_bytes()),
                 solabi::Bytes(cbor::to_vec(accounts::types::Transfer {
@@ -365,7 +443,7 @@ mod test {
         let dispatch_result = signer.call_evm_opts(
             &ctx,
             contract_address.into(),
-            solabi::selector!("test(bytes,bytes)"),
+            solabi::selector!("test_call(bytes,bytes)"),
             &(
                 solabi::Bytes("accounts.Transfer".as_bytes()),
                 solabi::Bytes(cbor::to_vec(accounts::types::Transfer {

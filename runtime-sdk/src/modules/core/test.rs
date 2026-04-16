@@ -274,7 +274,7 @@ impl GasWasterModule {
 
     #[handler(call = Self::METHOD_SPECIFIC_GAS_REQUIRED)]
     fn specific_gas_required<C: Context>(
-        ctx: &C,
+        _ctx: &C,
         _args: (),
     ) -> Result<(), <GasWasterModule as module::Module>::Error> {
         // Fails with an error if less than X gas was specified. (doesn't fail with out-of-gas).
@@ -288,7 +288,7 @@ impl GasWasterModule {
 
     #[handler(call = Self::METHOD_SPECIFIC_GAS_REQUIRED_HUGE)]
     fn specific_gas_required_huge<C: Context>(
-        ctx: &C,
+        _ctx: &C,
         _args: (),
     ) -> Result<(), <GasWasterModule as module::Module>::Error> {
         // Fails with an error if less than X gas was specified. (doesn't fail with out-of-gas).

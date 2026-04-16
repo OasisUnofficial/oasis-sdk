@@ -48,7 +48,7 @@ func SubcallDelegationTest(ctx context.Context, env *scenario.Env) error {
 	// Call the method.
 	amount := types.NewBaseUnits(*quantity.NewFromUint64(10_000), types.NativeDenomination)
 	consensusAmount := quantity.NewFromUint64(10) // Consensus amount is scaled.
-	data, err := contractSubcall.ABI.Pack("test", []byte("consensus.Delegate"), cbor.Marshal(consensusAccounts.Delegate{
+	data, err := contractSubcall.ABI.Pack("test_call", []byte("consensus.Delegate"), cbor.Marshal(consensusAccounts.Delegate{
 		To:     testing.Alice.Address,
 		Amount: amount,
 	}))

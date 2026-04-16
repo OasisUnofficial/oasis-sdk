@@ -12,11 +12,22 @@ contract Test {
 
     error SubcallFailed(uint64 code, bytes module);
 
-    function test(
+    function test_call(
         bytes calldata method,
         bytes calldata body
     ) public payable returns (bytes memory) {
         (bool success, bytes memory data) = SUBCALL.call(
+            abi.encode(method, body)
+        );
+        require(success, "subcall failed");
+        return decodeResponse(data);
+    }
+
+    function test_staticcall(
+        bytes calldata method,
+        bytes calldata body
+    ) public view returns (bytes memory) {
+        (bool success, bytes memory data) = SUBCALL.staticcall(
             abi.encode(method, body)
         );
         require(success, "subcall failed");
