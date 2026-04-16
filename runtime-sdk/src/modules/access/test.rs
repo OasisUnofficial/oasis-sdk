@@ -93,12 +93,12 @@ impl TestModule {
     type Genesis = ();
 
     #[handler(call = "test.FilteredMethod")]
-    fn filtered_method<C: Context>(_ctx: &C, fail: bool) -> Result<u64, core::Error> {
+    fn filtered_method<C: Context>(_ctx: &C, _fail: bool) -> Result<u64, core::Error> {
         Ok(42)
     }
 
     #[handler(call = "test.AllowedMethod")]
-    fn allowed_method<C: Context>(ctx: &C, _args: ()) -> Result<u64, core::Error> {
+    fn allowed_method<C: Context>(_ctx: &C, _args: ()) -> Result<u64, core::Error> {
         Ok(42)
     }
 }

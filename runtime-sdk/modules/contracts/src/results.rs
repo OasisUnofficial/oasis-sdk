@@ -138,6 +138,7 @@ fn process_subcalls<Cfg: Config, C: Context>(
                         body,
                         max_depth: params.max_subcall_depth,
                         max_gas,
+                        read_only: false,
                     },
                     subcall::AllowAllValidator,
                 )?;

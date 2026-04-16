@@ -137,6 +137,7 @@ impl TestModule {
                 body: cbor::to_value(false),
                 max_depth: 8,
                 max_gas,
+                read_only: false,
             },
             subcall::AllowAllValidator,
         )?;

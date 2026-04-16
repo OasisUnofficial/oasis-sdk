@@ -122,6 +122,7 @@ impl PaymentMethod for Payment {
                         }),
                         max_depth: 8,
                         max_gas: remaining_gas,
+                        read_only: false,
                     },
                     ForbidReentrancy,
                 )?;
@@ -205,6 +206,7 @@ impl PaymentMethod for Payment {
                         }),
                         max_depth: 8,
                         max_gas: remaining_gas,
+                        read_only: false,
                     },
                     ForbidReentrancy,
                 )?;
@@ -300,6 +302,7 @@ impl PaymentMethod for Payment {
                         }),
                         max_depth: 8,
                         max_gas: remaining_gas,
+                        read_only: false,
                     },
                     ForbidReentrancy,
                 )?;
