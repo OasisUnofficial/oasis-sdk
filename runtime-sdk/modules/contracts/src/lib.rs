@@ -169,6 +169,10 @@ pub enum Error {
     #[sdk_error(code = 32)]
     CodeDeclaresTooManyLocals,
 
+    #[error("code declares too deep nesting")]
+    #[sdk_error(code = 33)]
+    CodeDeclaresTooDeepNesting,
+
     #[error("core: {0}")]
     #[sdk_error(transparent)]
     Core(#[from] modules::core::Error),

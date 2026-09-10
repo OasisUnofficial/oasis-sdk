@@ -294,6 +294,69 @@ fn test_validate_and_transform() {
                 "Code with floating point instructions should fail validation (index {i})"
             );
         }
+
+        // Too many nested control-flow constructs.
+        let depth = 150000;
+        let mut code = String::from(
+            r#"
+            (module
+                (type (;0;) (func))
+                (func (;0;) (type 0))
+
+                (func $deeply_nested
+        "#,
+        );
+
+        for i in 0..depth {
+            match i % 3 {
+                0 => code.push_str("(block\n"),
+                1 => code.push_str("(loop\n"),
+                2 => {
+                    code.push_str("(i32.const 1)\n");
+                    code.push_str("(if\n");
+                    code.push_str("  (then\n");
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        code.push_str("nop\n");
+
+        for i in (0..depth).rev() {
+            match i % 3 {
+                0 | 1 => {
+                    code.push_str(")\n");
+                }
+                2 => {
+                    code.push_str("  )\n");
+                    code.push_str("  (else\n");
+                    code.push_str("    nop\n");
+                    code.push_str("  )\n");
+                    code.push_str(")\n");
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        code.push_str(
+            r#"
+            )
+
+            (export "allocate" (func 0))
+            (export "deallocate" (func 0))
+            (export "instantiate" (func 0))
+            (export "call" (func 0))
+            (export "__oasis_sv_1" (func 0))
+        )
+        "#,
+        );
+
+        let code = wat::parse_str(&code).unwrap();
+        let result = wasm::validate_and_transform::<Cfg, C>(&code, types::ABI::OasisV1, params);
+        assert!(
+            matches!(result, Err(Error::CodeDeclaresTooDeepNesting)),
+            "Function nested more than 100 levels should fail validation"
+        );
     }
 
     let mut mock = mock::Mock::default();

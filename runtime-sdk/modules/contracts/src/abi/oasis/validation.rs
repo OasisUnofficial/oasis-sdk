@@ -11,12 +11,47 @@ use crate::{
 };
 
 const EXPORT_SUB_VERSION_PREFIX: &str = "__oasis_sv_";
+const MAX_CONTROL_FLOW_NESTING_DEPTH: usize = 1_000;
 
 fn check_valtype_acceptable(ty: ValType) -> Result<(), Error> {
     match ty {
         ValType::F32 | ValType::F64 => Err(Error::ModuleUsesFloatingPoint),
         _ => Ok(()),
     }
+}
+
+fn check_nesting_depth(func: &walrus::LocalFunction) -> Result<(), Error> {
+    fn dfs(
+        func: &walrus::LocalFunction,
+        block_id: walrus::ir::InstrSeqId,
+        depth: usize,
+    ) -> Result<(), Error> {
+        if depth > MAX_CONTROL_FLOW_NESTING_DEPTH {
+            return Err(Error::CodeDeclaresTooDeepNesting);
+        }
+
+        let block = func.block(block_id);
+
+        for (instr, _) in block.instrs.iter() {
+            match instr {
+                walrus::ir::Instr::Block(b) => {
+                    dfs(func, b.seq, depth + 1)?;
+                }
+                walrus::ir::Instr::Loop(l) => {
+                    dfs(func, l.seq, depth + 1)?;
+                }
+                walrus::ir::Instr::IfElse(ie) => {
+                    dfs(func, ie.consequent, depth + 1)?;
+                    dfs(func, ie.alternative, depth + 1)?;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    dfs(func, func.entry_block(), 0)
 }
 
 struct FloatScanner(bool);
@@ -465,7 +500,8 @@ impl<Cfg: Config> OasisV1<Cfg> {
             return Err(Error::CodeDeclaresTooManyMemories);
         }
 
-        // Verify that the code doesn't use any floating point instructions.
+        // Verify that the code doesn't use any floating point instructions
+        // and doesn't exceed the maximum control-flow nesting depth.
         let mut function_count = 0u32;
         for func in module.functions() {
             let func_type = module.types.get(func.ty());
@@ -477,6 +513,7 @@ impl<Cfg: Config> OasisV1<Cfg> {
                 if function_count > params.max_wasm_functions {
                     return Err(Error::CodeDeclaresTooManyFunctions);
                 }
+                check_nesting_depth(local)?;
                 let mut scanner = FloatScanner(false);
                 dfs_in_order(&mut scanner, local, local.entry_block());
                 if scanner.0 {
